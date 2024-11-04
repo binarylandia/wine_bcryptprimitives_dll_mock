@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+
+set -euxo pipefail
+
+: "${UID:? "UID is not set."}"
+: "${GID:? "GID is not set."}"
+: "${USER:? "USER is not set."}"
+: "${GROUP:? "GROUP is not set."}"
+: "${HOME:? "HOME is not set."}"
+
+if [ -z "$(getent group "${GID}")" ]; then
+  groupadd --system --gid "${GID}" "${GROUP}"
+else
+  GROUP_EXISTING="$(getent group "${GID}" | cut -d: -f1 || true)"
+  if [ "${GROUP_EXISTING}" != "${GROUP}" ]; then
+    groupmod --new-name "${GROUP}" "${GROUP_EXISTING}"
+  fi
+fi
+
+if [ -f /etc/debian_version ]; then
+  SUDO_GROUP="sudo"
+elif [ -f /etc/redhat-release ]; then
+  SUDO_GROUP="wheel"
+fi
+
+USER_EXISTING="$(getent passwd "${UID}" | cut -d: -f1 || true)"
+HOME_EXISTING="$(getent passwd "${UID}" | cut -d: -f6 || true)"
+
+if [ -z "${USER_EXISTING}" ]; then
+  useradd \
+    --system \
+    --home-dir "${HOME}" \
+    --create-home \
+    --shell "/bin/bash" \
+    --gid "${GID}" \
+    --groups "${SUDO_GROUP},${GROUP}" \
+    --uid "${UID}" \
+    "${USER}"
+elif [ "${USER_EXISTING}" != "${USER}" ] || [ "${HOME_EXISTING}" != "${HOME}" ]; then
+  if [ "${HOME_EXISTING}" != "${HOME}" ]; then
+    mkdir -p "${HOME}"
+    chown -R "${USER_EXISTING}:${GROUP}" "${HOME}"
+  fi
+  usermod \
+    --home "${HOME}" \
+    --shell "/bin/bash" \
+    --gid "${GID}" \
+    --groups "${SUDO_GROUP},${GROUP}" \
+    --uid "${UID}" \
+    --login "${USER}" \
+    "${USER_EXISTING}"
+fi

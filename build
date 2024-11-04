@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+set -euxo pipefail
+
+export BUILDKIT_PROGRESS=plain
+export PROGRESS_NO_TRUNC=1
+
+DOCKER_REPO="bryptprimitives_builder"
+DOCKER_IMAGE_NAME_SAFE="${DOCKER_REPO//\//-}"
+DOCKER_CONTAINER_NAME="${DOCKER_IMAGE_NAME_SAFE}-$(date -u "+%Y-%m-%d_%H-%M-%S_%3NZ")"
+
+USER="user"
+GROUP="user"
+
+docker build \
+  --tag="$DOCKER_IMAGE_NAME_SAFE" \
+  --network=host \
+  --build-arg="UID=$(id -u)" \
+  --build-arg="GID=$(id -g)" \
+  --build-arg="USER=${USER}" \
+  --build-arg="GROUP=${GROUP}" \
+  .
+
+mkdir -p .build .out
+
+docker run -it --rm \
+  --init \
+  --name="$DOCKER_CONTAINER_NAME" \
+  --hostname="${DOCKER_IMAGE_NAME_SAFE}" \
+  --user="$(id -u):$(id -g)" \
+  --volume="$(pwd):/workdir" \
+  --workdir="/workdir" \
+  --env="UID=$(id -u)" \
+  --env="GID=$(id -g)" \
+  --env="USER=${USER}" \
+  --env="GROUP=${GROUP}" \
+  --env="PS1=\${USER}@\${HOST}" \
+  --env="TZ=Etc/UTC" \
+  --env="LANG=C.UTF-8" \
+  --ulimit core=0 \
+  "$DOCKER_IMAGE_NAME_SAFE" \
+  make
